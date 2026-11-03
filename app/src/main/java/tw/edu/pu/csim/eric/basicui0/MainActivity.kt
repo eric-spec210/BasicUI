@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -44,6 +46,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.tooling.preview.Preview
 import tw.edu.pu.csim.eric.basicui0.ui.theme.BasicUITheme
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -74,12 +77,31 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun Main(modifier: Modifier = Modifier) {
-    Box() {
+    // 記錄目前播放哪一支影片
+    var currentVideo by remember { mutableIntStateOf(R.raw.love) }
+
+    // 下一支要切換的影片
+    val nextVideo = if (currentVideo == R.raw.love) R.raw.handpan else R.raw.love
+
+    // 按鈕上顯示的檔名（顯示的是「要切換成」的那支影片）
+    val nextVideoName = if (nextVideo == R.raw.love) "love.mp4" else "handpan.mp4"
+
+    Box(modifier = modifier) {
         LazyColumnExample(modifier)
         ColumnExample(modifier)
         TextFieldExample(modifier)
         LazyRowExample(modifier)
-        SimpleVideoPlayer(R.raw.love)
+
+        Column(modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            SimpleVideoPlayer(videoRes = currentVideo)
+
+            Button(
+                onClick = { currentVideo = nextVideo }
+            ) {
+                Text("切換成 $nextVideoName 影片")
+            }
+        }
     }
 }
 
@@ -193,7 +215,9 @@ fun LazyRowExample(modifier: Modifier = Modifier) {
         Animal("小雞", R.drawable.animal9)
     )
     LazyRow(
-        modifier = Modifier.fillMaxHeight(),
+        modifier = Modifier
+            .fillMaxHeight()
+            .padding(top = 160.dp), // 💡 往下推，避開影片與按鈕
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 直接傳入 animals 清單，每個迴圈拿到一個 animal 物件
@@ -236,23 +260,28 @@ fun SimpleVideoPlayer(
 ) {
     val context = LocalContext.current
 
-    // 建立並記住 ExoPlayer 實體，設定影片路徑與自動播放
+    // 播放器只建立一次
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
-            val uri = "android.resource://${context.packageName}/$videoRes"
-            setMediaItem(MediaItem.fromUri(uri))
-            prepare()
-            playWhenReady = true // 載入完成自動播放
+            playWhenReady = true
         }
     }
-    // 利用 DisposableEffect 管理生命週期
-    // 離開畫面時自動釋放記憶體
+
+    // 每當 videoRes 改變，就換成新的影片並重新播放
+    LaunchedEffect(videoRes) {
+        val uri = "android.resource://${context.packageName}/$videoRes"
+        exoPlayer.setMediaItem(MediaItem.fromUri(uri))
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+    }
+
+    // 離開畫面時釋放播放器資源
     DisposableEffect(Unit) {
         onDispose {
-            exoPlayer.release() // 💡 釋放播放器資源
+            exoPlayer.release()
         }
     }
-    //將原生的 PlayerView 嵌入 Compose
+
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
